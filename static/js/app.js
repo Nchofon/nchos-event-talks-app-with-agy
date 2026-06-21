@@ -7,6 +7,7 @@ let selectedUpdate = null;
 // DOM Elements
 const refreshBtn = document.getElementById('refresh-btn');
 const refreshIcon = document.getElementById('refresh-icon');
+const exportCsvBtn = document.getElementById('export-csv-btn');
 const lastUpdatedText = document.getElementById('last-updated-text');
 const releaseNotesList = document.getElementById('release-notes-list');
 const feedLoading = document.getElementById('feed-loading');
@@ -414,6 +415,76 @@ function submitTweet() {
     showToast("Opened X/Twitter composer!");
 }
 
+// CSV Export Utilities
+function exportToCSV() {
+    const dataToExport = [];
+    
+    allReleases.forEach(entry => {
+        entry.updates.forEach(update => {
+            // Category check
+            const matchesCategory = currentFilter === 'all' || update.type === currentFilter;
+            
+            // Search query check
+            const plainText = stripHtml(update.html).toLowerCase();
+            const matchesSearch = !searchQuery || 
+                                  plainText.includes(searchQuery) || 
+                                  update.type.toLowerCase().includes(searchQuery) ||
+                                  entry.date.toLowerCase().includes(searchQuery);
+                                  
+            if (matchesCategory && matchesSearch) {
+                dataToExport.push({
+                    date: entry.date,
+                    type: update.type,
+                    content: stripHtml(update.html).replace(/\s+/g, ' ').trim(),
+                    link: entry.link
+                });
+            }
+        });
+    });
+
+    if (dataToExport.length === 0) {
+        showToast("No data to export!");
+        return;
+    }
+
+    const headers = ["Date", "Category", "Content", "Source URL"];
+    const csvRows = [headers.join(",")];
+
+    dataToExport.forEach(item => {
+        const values = [
+            escapeCSV(item.date),
+            escapeCSV(item.type),
+            escapeCSV(item.content),
+            escapeCSV(item.link)
+        ];
+        csvRows.push(values.join(","));
+    });
+
+    const csvContent = csvRows.join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `bigquery_release_notes_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showToast(`Exported ${dataToExport.length} updates to CSV!`);
+}
+
+function escapeCSV(val) {
+    if (val === null || val === undefined) return '';
+    let stringVal = val.toString();
+    if (stringVal.includes('"') || stringVal.includes(',') || stringVal.includes('\n') || stringVal.includes('\r')) {
+        stringVal = stringVal.replace(/"/g, '""');
+        return `"${stringVal}"`;
+    }
+    return stringVal;
+}
+
 // ==========================================================================
 // 6. Helpers / Utilities
 // ==========================================================================
@@ -493,6 +564,7 @@ function showToast(message) {
 // Refresh triggers
 refreshBtn.addEventListener('click', fetchReleases);
 retryBtn.addEventListener('click', fetchReleases);
+exportCsvBtn.addEventListener('click', exportToCSV);
 
 // Filter chips triggers
 filterContainer.addEventListener('click', (e) => {
